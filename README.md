@@ -23,7 +23,6 @@
 
 The string returned from the `serialize` function is **literal** and **valid** JavaScript, which can be saved to a `.js` or `.ts` file, or even embedded inside of a `<script>` tag.
 
-
 ## Usage
 
 ```ts

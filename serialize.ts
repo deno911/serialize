@@ -142,13 +142,8 @@ const defaultOptions: SerializeOptions = {
 };
 
 /**
- * ## Serialize
- *
  * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
  * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
- *
- * Based heavily on the `serialize-javascript` project by Yahoo!, this was
- * ported to TypeScript for Deno, and extended with a few extra features.
  *
  * ### Supported Types
  *
@@ -172,23 +167,23 @@ const defaultOptions: SerializeOptions = {
  * import { serialize } from "https://x.nest.land/serialize@1.0.0-rc.1/mod.ts";
  *
  * serialize({
- *   strg: 'string',
- *   bool: true,
- *   numb: 0,
- *   big1: 10n,
- *   big2: BigInt(10),
- *   reg1: /([^\s]+)/g,
- *   reg2: new RegExp("([^\s]+)", "g")
- *   objs: {foo: 'foo'},
- *   arrr: [1, 2, 3],
- *   nill: null,
- *   unde: undefined,
- *   infi: Number.POSITIVE_INFINITY,
- *   date: new Date(),
- *   maps: new Map([['hello', 'world']]),
- *   sets: new Set([123, 456]),
- *   func: (arg) => `"${arg}"`,
- *   symb: Symbol.for("Deno.customInspect")
+ *   strings: "string",
+ *   booleans: true,
+ *   numeric: 0,
+ *   bigint1: 10n,
+ *   bigint2: BigInt(10),
+ *   regexp1: /([^\s]+)/g,
+ *   regexp2: new RegExp("([^\\s]+)", "g"),
+ *   objects: { foo: "foo" },
+ *   arrayLikes: [1, 2, 3],
+ *   actualNull: null,
+ *   undefineds: undefined,
+ *   nonFinites: Number.POSITIVE_INFINITY,
+ *   dateObject: new Date(),
+ *   mapObjects: new Map([["hello", "world"]]),
+ *   setObjects: new Set([123, 456]),
+ *   arrowFuncs: (arg) => `"${arg}"`,
+ *   globalSyms: Symbol.for("Deno.customInspect"),
  * });
  * ```
  *
@@ -206,8 +201,8 @@ const defaultOptions: SerializeOptions = {
  *
  * @see {@linkcode SerializeOptions} for a complete list of options that are available in the aforementioned second argument.
  *
- * > Note: **HTML entities and JS line terminators are escaped automatically.**
- * > To disable this feature, set the `unsafe` option to `true`.
+ * Note: **HTML entities and JS line terminators are escaped automatically.**
+ * To disable this feature, set the `unsafe` option to `true`.
  */
 function serialize<T>(value: T, options?: SerializeOptions): string;
 function serialize<T>(value: T, space: number | string): string;
