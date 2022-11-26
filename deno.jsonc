@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "deno.window",
+      "deno.unstable",
+      "dom",
+      "dom.extras",
+      "dom.iterable",
+      "deno.ns"
+    ]
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-namespace",
+        "no-empty-interface",
+        "ban-types",
+        "ban-ts-comment"
+      ]
+    },
+    "report": "compact"
+  },
+  "fmt": {
+    "files": {
+      "exclude": [
+        "./.*"
+      ]
+    },
+    "options": {
+      "proseWrap": "preserve"
+    }
+  }
+}

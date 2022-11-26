@@ -1,0 +1,28 @@
+# http://editorconfig.org
+root = true
+
+# defaults for all text-based files
+[*]
+indent_style             = space
+indent_size              = 2
+charset                  = utf-8
+end_of_line              = lf
+trim_trailing_whitespace = true
+insert_final_newline     = true
+
+# sensible defaults for shell formatting
+[*.{sh,bash,bashrc,bash_aliases,bash_profile,profile}]
+shell_variant            = bash
+binary_next_line         = true
+switch_case_indent       = true
+space_redirects          = true
+keep_padding             = true
+function_next_line       = true
+never_split              = true
+indent_style             = tab
+tab_width                = 2
+
+
+# files and folders to completely ignore
+[.{git,github,vscode,devcontainer}/**]
+ignore = true

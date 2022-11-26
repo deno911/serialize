@@ -1,0 +1,31 @@
+{
+  "$schema": "https://x.nest.land/eggs@0.3.10/src/schema.json",
+  "name": "serialize",
+  "entry": "./mod.ts",
+  "description": "Serialize JS/TS into a superset of JSON, supporting Date, BigInt, RegExp, Maps, and more.",
+  "homepage": "https://github.com/deno911/serialize",
+  "version": "1.0.0-rc.1",
+  "releaseType": false,
+  "bump": false,
+  "unstable": true,
+  "unlisted": false,
+  "files": [
+    "./{serialize,deserialize,mod,_util}.ts",
+    "./{LICENSE,README.md}",
+    "./deno.json*"
+  ],
+  "ignore": [
+    "./*.test.ts",
+    "./*test.ts",
+    "./version.ts",
+    "./.gitignore",
+    "./.gitattributes",
+    "./.editorconfig",
+    "./.devcontainer"
+  ],
+  "checkFormat": true,
+  "checkTests": true,
+  "checkInstallation": false,
+  "check": true,
+  "checkAll": true
+}
