@@ -2,36 +2,29 @@
 
 # 🦕 serialize
 
-##### Serialize JavaScript and TypeScript to a **_superset_ of JSON**, supporting Date, BigInt, Set, Map, and more.
+##### Serialize JS/TS to a **_superset_ of JSON** without sacrificing critical data.
 
 </div>
 
-## Serializable
+## Usage
 
-- [x] `Array`
-- [x] `Date`
-- [x] `Map`
-- [x] `Set`
-- [x] `URL`
-- [x] `Function`
-- [x] `Getters` · _accessor properties_
-- [x] `RegExp` · _literal_ or _constructed_
-- [x] `BigInt` · _literal_ or _constructed_
-- [x] `Symbol` 🚧 · **globals only** · experimental
-- [x] `Infinity`
-- [x] `undefined`
+### `serialize`
 
 The string returned from the `serialize` function is **literal** and **valid** JavaScript, which can be saved to a `.js` or `.ts` file, or even embedded inside of a `<script>` tag.
 
-## Usage
+#### [deno.land](https://deno.land/x/serialize)
 
 ```ts
-import { serialize } from "https://deno.land/x/serialize/mod.ts";
+import { serialize } from "https://deno.land/x/serialize@1.0.0-rc.2/mod.ts";
 ```
+
+#### [nest.land](https://x.nest.land/gallery/serialize)
 
 ```ts
 import { serialize } from "https://x.nest.land/serialize@1.0.0-rc.2/mod.ts";
 ```
+
+### "Kitchen Sink" Demo
 
 ```ts
 serialize({
@@ -47,7 +40,7 @@ serialize({
   actualNull: null,
   undefineds: undefined,
   nonFinites: Number.POSITIVE_INFINITY,
-  dateObject: new Date(),
+  dateObject: new Date("2022-11-26T05:48:02.806Z"),
   mapObjects: new Map([["hello", "world"]]),
   setObjects: new Set([123, 456]),
   arrowFuncs: (arg) => `"${arg}"`,
@@ -58,10 +51,29 @@ serialize({
 The above will produce the following string output:
 
 ```ts
-'{"strg":"string","bool":true,"numb":0,"big1":BigInt("10"),"big2":BigInt("10"),"reg1":new RegExp("([^\\\\s]+)", "g"),"reg2":new RegExp("([^s]+)", "g"),"objs":{"foo":"foo"},"arrr":[1,2,3],"nill":null,"unde":undefined,"infi":Infinity,"date":new Date("2022-11-25T03:39:50.820Z"),"maps":new Map([["hello","world"]]),"sets":new Set([123,456]),"func":(arg)=>`"${arg}"`,"symb":Symbol.for("Deno.customInspect")}';
+'{"strings":"string","booleans":true,"numeric":0,"bigint1":BigInt("10"),"bigint2":BigInt("10"),"regexp1":new RegExp("([^\\\\s]+)", "g"),"regexp2":new RegExp("([^\\\\s]+)", "g"),"objects":{"foo":"foo"},"arrayLikes":[1,2,3],"actualNull":null,"undefineds":undefined,"nonFinites":Infinity,"dateObject":new Date("2022-11-26T05:48:02.806Z"),"mapObjects":new Map([["hello","world"]]),"setObjects":new Set([123,456]),"arrowFuncs":(arg)=>`"${arg}"`,"globalSyms":Symbol.for("Deno.customInspect")}';
 ```
 
 > **Note**: to produced a beautified string, you can pass an optional second argument to `serialize()` to define the number of spaces to be used for the indentation.
+
+---
+
+## Supported Types
+
+- [x] `Array`
+- [x] `Date`
+- [x] `Map`
+- [x] `Set`
+- [x] `URL`
+- [x] `Infinity`
+- [x] `undefined`
+- [x] `RegExp` · [`options.literalRegExp`](#optionsliteralregexp) for literal output
+- [x] `BigInt` · [`options.literalBigInt`](#optionsliteralbigint) for literal output
+- [x] `Function` · [`options.includeFunction`](#optionsincludefunction)(enabled by default)
+- [x] `Getters` · [`options.includeGetters`](#optionsincludegetters) required
+- [ ] `Symbol` · [`options.includeSymbols`](#optionsincludesymbols) required 🚧
+
+[🚧 <u> **More information on Symbols and Serialization**</u>](#optionsincludesymbols)
 
 ---
 
@@ -194,7 +206,7 @@ This option indicates the target object does not contain any functions or RegExp
 serialize(obj, { isJSON: true });
 ```
 
-> **Note**: when enabled the output is still be escaped to protect against XSS.
+> **Note**: still escaped for XSS prevention ([see `options.unsafe`](#optionsunsafe))
 
 ### `options.includeFunction`
 
@@ -239,56 +251,22 @@ serialize(obj, { includeGetters: true });
 
 Serialize non-enumerable properties that are normally hidden.
 
+> **Note**: only partially implemented
+
 > Default value is `false`
 
 ### `options.includeSymbols`
 
-> ⚠️ **experimental**
+> ⚠️ **support for symbols is experimental**
 
 Serialize values with the type of `symbol`. Only works with global symbols created with the `Symbol.for()` method. Any standard symbols will be coerced into globals,
 carrying over their description text (if any).
 
+Serializing the symbol primitive is a totally bonkers concept, and - by design - is impossible to truly achieve. In reality, it's just copying the string key from
+a given symbol, and therefore there is a strong chance the one created during
+the deserializing process **will be a different value entirely**.
+
 > Default value is `true`
-
-### `options.sorted`
-
-Sort entries of keyed collections (Array, Object, Set, Map).
-
-> Default value is `false`
-
-### `options.sortCompareFn`
-
-Custom comparator to sort entries (implies `options.sorted` is `true`).
-**Note**: if `sorted` is `false` while this option is defined with a valid
-comparator function, it will override the former and sort all entries.
-
-> Default value is `undefined`
-
-### `options.strAbbreviateSize`
-
-> **Note**: not currently implemented
-
-The maximum length of a string before it is truncated with an ellipsis.
-
-> Default value is `undefined` (no limit)
-
-### `options.literalRegExp`
-
-Serialize Regular Expressions into literals, e.g. `/.../i` rather than the default `RegExp("...", "i")`.
-
-```ts
-serialize({ pattern: /(foo|bar|baz)/i }, { literalRegExp: true });
-// '{"pattern":/(foo|bar|baz)/i}'
-```
-
-> Default value is `false`, with behavior as seen below.
-
-```ts
-serialize({ pattern: /(foo|bar|baz)/i });
-// '{"pattern":new RegExp("(foo|bar|baz)","i")}'
-```
-
-> Default value is `false`
 
 ### `options.literalBigInt`
 
@@ -306,11 +284,42 @@ serialize({ bigger: 200n });
 // '{"bigger":BigInt("200")}'
 ```
 
+### `options.literalRegExp`
+
+Serialize Regular Expressions into literals, e.g. `/.../i` rather than the default `RegExp("...", "i")`.
+
+```ts
+serialize({ pattern: /(foo|bar|baz)/i }, { literalRegExp: true });
+// '{"pattern":/(foo|bar|baz)/i}'
+```
+
+> Default value is `false`, with behavior as seen below.
+
+```ts
+serialize({ pattern: /(foo|bar|baz)/i });
+// '{"pattern":new RegExp("(foo|bar|baz)","i")}'
+```
+
 ### `options.silent`
 
 Attempt to silence most errors and diagnostic messages.
 
 > Default value is `true`
+
+### `options.sorted`
+
+Sort entries of keyed collections (Array, Object, Set, Map).
+
+> Default value is `false`
+
+### `options.sortCompareFn`
+
+Custom comparator to sort entries in Arrays, Maps, Sets, etc.
+
+**Note**: Implies `options.sorted`. If `sorted` is `false` while this option is defined with a valid
+comparator function, it will override the former.
+
+> Default value is `undefined`
 
 ### `options.space`
 
@@ -322,6 +331,14 @@ This option is the same as the `space` argument that can be passed to [`JSON.str
 serialize(obj, { space: 2 });
 ```
 
+### `options.strAbbreviateSize`
+
+> **Note**: not yet implemented
+
+The maximum length of a string before it is truncated with an ellipsis.
+
+> Default value is `undefined` (no limit)
+
 ### `options.unsafe`
 
 This option is to signal `serialize()` that we want to do a straight conversion, without the XSS protection. This option needs to be explicitly set to `true`. HTML characters and JavaScript line terminators will not be escaped. You will have to roll your own.
@@ -331,6 +348,8 @@ This option is to signal `serialize()` that we want to do a straight conversion,
 ```ts
 serialize(obj, { unsafe: true });
 ```
+
+> **Note**: [please see the **Auto-Escaped Characters** section below](#auto-escaped-characters).
 
 ---
 
@@ -386,6 +405,8 @@ function deserialize<T>(serialized: string): T {
 ### Type Safety
 
 ```ts
+import { serialize, deserialize } from "https://deno.land/x/serialize@1.0.0-rc.2/mod.ts";
+
 interface User {
   name: string;
   age: bigint;
@@ -490,5 +511,4 @@ gh pr create --title "fix: typos in README.md"
 [gh-cli]: https://cli.github.com
 [nberlette]: https://github.com/nberlette
 [LICENSE]: https://github.com/deno911/serialize/blob/main/LICENSE
-[sjs-npm]: https://www.npmjs.org/package/serialize-javascript
 [sjs-gh]: https://github.com/yahoo/serialize-javascript

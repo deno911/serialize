@@ -16,3 +16,4 @@ Thumbs.db
 .cache
 deno.lock
 *.lock
+_next

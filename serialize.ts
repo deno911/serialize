@@ -1,9 +1,7 @@
 /// <reference no-default-lib="true" />
 /// <reference lib="deno.ns" />
 /// <reference lib="deno.window" />
-/// <reference lib="deno.unstable" />
 /// <reference lib="dom.iterable" />
-/// <reference lib="dom.extras" />
 /// <reference lib="dom" />
 
 import {
@@ -25,7 +23,7 @@ import {
 /**
  * Options available to control the behavior of {@linkcode serialize}.
  */
-interface SerializeOptions {
+export interface SerializeOptions {
   /**
    * Serialize Arrays using the `Array.from` method, which may not be available
    * in all target environments (looking at you, Internet Explorer). Default
@@ -92,13 +90,6 @@ interface SerializeOptions {
   silent?: boolean;
 
   /**
-   * Control the indentation width in the generated string.
-   * Set to 0 to disable pretty-printing entirely.
-   * @default 0
-   */
-  space?: string | number;
-
-  /**
    * Sort entries of keyed collections (Array, Object, Set, Map).
    * @default false
    */
@@ -112,6 +103,13 @@ interface SerializeOptions {
    * @default undefined
    */
   sortCompareFn?: ((a: unknown, b: unknown) => number) | null;
+
+  /**
+   * Control the indentation width in the generated string.
+   * Set to 0 to disable pretty-printing entirely.
+   * @default 0
+   */
+  space?: string | number;
 
   /**
    * The maximum length of a string before it is truncated with an ellipsis.
@@ -145,26 +143,10 @@ const defaultOptions: SerializeOptions = {
  * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
  * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
  *
- * ### Supported Types
- *
- * - [x] `Array`
- * - [x] `Date`
- * - [x] `Map`
- * - [x] `Set`
- * - [x] `URL`
- * - [x] `Function`
- * - [x] `Getters` · _accessor properties_
- * - [x] `RegExp` · _literal_ or _constructed_
- * - [x] `BigInt` · _literal_ or _constructed_
- * - [x] `Symbol` 🚧 · **globals only** · experimental
- * - [x] `Infinity`
- * - [x] `undefined`
- *
  * ### Usage
  *
- * @example
- * ```ts
- * import { serialize } from "https://x.nest.land/serialize@1.0.0-rc.1/mod.ts";
+ * @example ```ts
+ * import { serialize } from "https://deno.land/x/serialize/mod.ts";
  *
  * serialize({
  *   strings: "string",
@@ -187,28 +169,86 @@ const defaultOptions: SerializeOptions = {
  * });
  * ```
  *
- * ### Pretty Printing
+ * ### Supported Types
  *
- * For a pretty-printed output, the optional second argument can be used to
- * define identation size. Accepted values are an object literal with a `space`
- * property, or literal `string`/`number` (legacy option for compatibility, not
- * recommended).
+ * - [x] `Array`
+ * - [x] `Date`
+ * - [x] `Map`
+ * - [x] `Set`
+ * - [x] `URL`
+ * - [x] `Infinity`
+ * - [x] `undefined`
+ * - [x] `RegExp` · enable {@linkcode options.literalRegExp} to output literals}
+ * - [x] `BigInt` · enable {@linkcode options.literalBigInt} to output literals
+ * - [x] `Function` · disable {@linkcode options.includeFunction} to exclude
+ * - [x] `Getters` · enable {@linkcode options.includeGetters} to output the getter properties source code, instead of their resolved static value
+ * - [ ] `Symbol` · disable {@linkcode options.includeSymbols} to exclude
  *
  * ### Options
  *
- * The `serialize()` function accepts an `options` object for its 2nd argument,
- * allowing fine-grained control of various aspects of the program's behavior.
+ * The `serialize` function accepts an `options` object for its 2nd argument,
+ * allowing fine-grained control of various aspects of the program behavior.
  *
- * @see {@linkcode SerializeOptions} for a complete list of options that are available in the aforementioned second argument.
+ * #### Pretty Printing
+ *
+ * For a pretty-printed output, the optional second argument can be used to
+ * define identation size. Accepted values: object literal with a property
+ * named `space`, or just a `string` / `number` literal (legacy option).
  *
  * Note: **HTML entities and JS line terminators are escaped automatically.**
  * To disable this feature, set the `unsafe` option to `true`.
+ *
+ * @see {@linkcode SerializeOptions} for a complete list of options that are
+ * available in the aforementioned second argument.
+ * @module
  */
-function serialize<T>(value: T, options?: SerializeOptions): string;
+
+/**
+ * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
+ * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
+ *
+ * @param value - object literal or instance to be serialized
+ * @returns string contained the serialized data
+ * @see {@linkcode SerializeOptions}
+ */
+function serialize<T>(value: T): string;
+/**
+ * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
+ * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
+ *
+ * @param value - object literal or instance to be serialized
+ * @param space - `string` or `number` of spaces to indent the output with.
+ * Shorthand way to set the `options.space` value (and nothing else).
+ * @returns string contained the serialized data
+ * @see {@linkcode SerializeOptions}
+ */
 function serialize<T>(value: T, space: number | string): string;
+/**
+ * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
+ * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
+ *
+ * @param value - object literal or instance to be serialized
+ * @param options - object literal of {@linkcode SerializeOptions} type
+ * @returns string contained the serialized data
+ * @see {@linkcode SerializeOptions}
+ */
 function serialize<T>(value: T, options: SerializeOptions): string;
-function serialize<T = unknown>(
-  obj: T,
+/**
+ * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
+ * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
+ *
+ * @param value - object literal or instance to be serialized
+ * @param [options] - either an object literal of type {@linkcode SerializeOptions}, or a `string` or `number` as shorthand for the `options.space` value and nothing else.
+ * @returns string contained the serialized data
+ * @see {@linkcode SerializeOptions}
+ */
+function serialize(
+  value: object,
+  options: SerializeOptions | (string | number),
+): string;
+
+function serialize(
+  obj: object,
   maybeOptions: any = { ...defaultOptions },
 ): string {
   const options: SerializeOptions = { ...defaultOptions };
@@ -519,7 +559,9 @@ function serialize<T = unknown>(
         } else {
           return String.raw`new RegExp(${
             serialize($[key][i].source, options)
-          }, "${validateRegExpFlags($[key][i].flags)}")`;
+          },${options.space ? " " : ""}"${
+            validateRegExpFlags($[key][i].flags)
+          }")`;
         }
       }
       case SYMBOL.Getter: {
@@ -601,6 +643,6 @@ function serialize<T = unknown>(
   return str;
 }
 
-export { serialize, type SerializeOptions };
+Object.freeze(serialize);
 
-export default Object.freeze(serialize);
+export { serialize, serialize as default };

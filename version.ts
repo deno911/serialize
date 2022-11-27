@@ -1,23 +1,48 @@
-/**
- * Version managed by {@link https://deno.land/x/pub}
- */
-export const VERSION = "1.0.0-rc.1";
+import $ from "https://deno.land/x/dax@0.15.0/mod.ts";
+import * as ansi from "https://deno.land/std@0.166.0/fmt/colors.ts";
 
-/**
- * Prepublish hook is called prior to the actual commit/tag of any files.
- * The hook is invoked with the upgraded target version for its only argument.
- * Returning `false` will abort the publish process before making the commit.
- */
-export function prepublish(version: string) {
-  console.log("Releasing new version: %s...", version);
+/** `VERSION` managed by https://deno.land/x/publish */
+export const VERSION = "1.0.0-rc.2";
+export const MODULE = "serialize";
+
+/** `prepublish` will be invoked before publish */
+export async function prepublish(version: string) {
+  for await (const file of $.fs.expandGlob("./*.{md,ts}")) {
+    if (file.isFile) await bump(file.path, version);
+  }
 }
 
-/**
- * Postpublish hook is called immediately after successfully pushing the newly
- * tagged version to GitHub. This is a good place to run any cleanup procedures
- * or to log a success message to the standard output (`console`).
- * The hook is invoked with the upgraded version for its only argument.
- */
+/** `postpublish` will be invoked after publish */
 export function postpublish(version: string) {
-  console.log("✔️ successfully published version %s!", version);
+  console.log(
+    ansi.brightGreen(
+      ` ✓ published ${ansi.bold(ansi.underline(`dis@${version}`))}`,
+    ),
+  );
+}
+
+export async function bump(path: string, version: string, prev = VERSION) {
+  const filename = $.path.basename(path);
+
+  try {
+    const TAG = "VERSION";
+    const PLACEHOLDERS = `\{${TAG}\}|\{\{${TAG}\}\}|\$${TAG}|${VERSION}`;
+    const SPECIFIER_RE = new RegExp(
+      `(?<=(?:^|[/"'\s])${MODULE}[@])(${PLACEHOLDERS}|[^/"'\s]+)(?=$|[/"'\s])`,
+      "mig",
+    );
+    let content = await Deno.readTextFile(path);
+
+    if (SPECIFIER_RE.test(content)) {
+      content = content.replaceAll(SPECIFIER_RE, version),
+        await Deno.writeTextFile(path, content).catch(console.error);
+    }
+  } catch (error) {
+    console.error(
+      ansi.bgRed(" FAILED "),
+      `⚠︎ Unable to bump ${ansi.underline(ansi.red(filename))} from ${
+        ansi.underline(prev)
+      } to ${ansi.bold(version)}!\n\n${error}`,
+    );
+  }
 }

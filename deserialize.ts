@@ -20,6 +20,8 @@ function deserialize<T = unknown>(serialized: string): T {
   }
 }
 
-export { deserialize };
+Object.freeze(deserialize);
 
-export default Object.freeze(deserialize);
+// export default deserialize;
+
+export { deserialize, deserialize as default };
