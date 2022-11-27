@@ -405,7 +405,10 @@ function deserialize<T>(serialized: string): T {
 ### Type Safety
 
 ```ts
-import { serialize, deserialize } from "https://deno.land/x/serialize@1.0.0-rc.2/mod.ts";
+import {
+  deserialize,
+  serialize,
+} from "https://deno.land/x/serialize@1.0.0-rc.2/mod.ts";
 
 interface User {
   name: string;
