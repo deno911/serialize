@@ -5,18 +5,18 @@
 /// <reference lib="dom" />
 
 import {
-  assert,
   deleteFunctions,
   escapeUnsafeChars,
   fallbackSymbolKey,
   getIndentSize,
-  is,
   RE,
   RESERVED,
   SYMBOL,
   UID,
   validateRegExpFlags,
 } from "./_util.ts";
+
+import { assert, is } from "./deps.ts";
 
 /**
  * Options available to control the behavior of {@linkcode serialize}.
@@ -333,12 +333,14 @@ function serialize(
       // Review property descriptors to see if prop is an accessor
       if (
         is.plainObject(descriptor) &&
-        is.subset({
-          get: () => {},
-          set: () => {},
-          enumerable: false,
-          configurable: false,
-        }, descriptor) && is.function(descriptor.get)
+        Object.keys(descriptor).every((key) =>
+          Object.keys({
+            get: () => {},
+            set: () => {},
+            enumerable: false,
+            configurable: false,
+          }).includes(key)
+        ) && is.function(descriptor.get)
       ) {
         const getterSource = Function.prototype.toString.call(descriptor?.get);
         const getterValue = descriptor?.get?.();
@@ -468,8 +470,41 @@ function serialize(
    * @param fn the function expression to serialize
    * @date 11/24/2022 - 2:41:36 PM
    */
-  function serializeFunc(fn: Function | ((...args: any[]) => unknown)): string {
+  function serializeFunc(
+    fn: Function | ((...args: any[]) => unknown),
+    trim = false,
+  ): string {
     assert.function(fn);
+
+    if (!trim) {
+      const untrimmed = String(serializeFunc(fn, true)).normalize("NFKC");
+      const space = getIndentSize(options.space);
+      const spaceReplace = space === 0 ? " " : " ".repeat(space);
+
+      if (space === 0) {
+        // normalize leading and trailing whitespace
+        const trimmed = untrimmed.replace(
+          /^([\s ]+|[\r\n]+|\n+)|([\s ]+|[\r\n]+|\n+)$/mg,
+          " ",
+        );
+        // explode all lines, normalize whitespace, then re-implode
+        return trimmed.split(/[\r\n]+|\n/).join(" ").replace(
+          /(?<!^)[ ]{2,}/g,
+          " ",
+        );
+      } else {
+        const trimmed = untrimmed.replace(
+          /^[\t\s ]+|[\t\s ]+$/mg,
+          spaceReplace,
+        );
+        // indent the function body plz
+        return trimmed.split(/[\r\n]+|\n/).map((ln, idx, arr) => {
+          return (idx > 0 && idx < arr.length - 1)
+            ? " ".repeat(space) + ln
+            : ln;
+        }).join("\n");
+      }
+    }
 
     /**
      * String containing the serialized source of the target function.
@@ -502,23 +537,19 @@ function serialize(
     // arrow functions, example: arg1 => arg1+5
     if (RE.ARROW.test(serializedFn)) {
       if (options.space && options.space !== 0) {
-        return serializedFn.replaceAll(/(?<=\S)(=>)(?=\S)/g, " $1 ");
+        return serializedFn.replace(/(?<=\S)(=>)(?=\S)/g, " $1 ");
       }
-      return serializedFn.replaceAll(/(?<=\S)[ ]*(=>)[ ]*(?=\S)/g, "$1");
+      return serializedFn.replace(/(?<=\S)[ ]*(=>)[ ]*(?=\S)/g, "$1");
     }
 
-    const argIndex = serializedFn.indexOf("(");
-    const _argLastIndex = serializedFn.search({
-      [Symbol.search]: (string: string): number => (
-        ~string.indexOf("){\n") ||
-        ~string.indexOf(") {") ||
-        ~string.indexOf(")=>") ||
-        ~string.indexOf(") =>") ||
-        -1
-      ),
-    });
+    const argIndex = serializedFn.indexOf("(") + 1;
+    const argLastIndex = serializedFn.indexOf(")");
     const defString = serializedFn.slice(0, argIndex).trim();
-    const def = defString.normalize("NFC").split(" ").filter((val) =>
+    const argArray = serializedFn.slice(argIndex, argLastIndex).split(/\s*,\s*/)
+      .map((s) => s.trim());
+    const argString = argArray.join(", ");
+
+    const def = defString.normalize("NFKC").split(" ").filter((val) =>
       val.length
     );
 
@@ -528,12 +559,13 @@ function serialize(
 
     // enhanced literal objects, example: {key() {}}
     if (nonReservedSymbols.length > 0) {
-      return (
-        (def.includes("async") ? "async " : "") +
-        "function " +
-        (def.join("").replaceAll(/[^*]/g, "")) +
-        (serializedFn.slice(argIndex))
-      );
+      return [
+        def.includes("async") && "async ",
+        "function ",
+        def.join("").replace(/[^*]/g, ""),
+        `(${options.space === 0 ? argArray.join(",") : argString})`,
+        serializedFn.slice(argLastIndex),
+      ].filter(Boolean).join("");
     }
 
     // arrow functions
@@ -586,7 +618,7 @@ function serialize(
     if (shouldSort) {
       let sortMethod: "toSorted" | "sort" = "sort";
 
-      if ([].toSorted && is.function([].toSorted)) {
+      if (is.function(Array.prototype.toSorted)) {
         sortMethod = "toSorted";
       }
 
@@ -636,7 +668,7 @@ function serialize(
           serialize(maybeSort(Array.from($[key][i].entries())), {
             ...options,
             space,
-          }).replaceAll(/^(\s+)/mg, "  $1")
+          }).replace(/^(\s+)/mg, "  $1")
         })`;
       }
       case SYMBOL.Set: {
@@ -647,7 +679,7 @@ function serialize(
           serialize(maybeSort(Array.from($[key][i].values())), {
             ...options,
             space,
-          }).replaceAll(/^(\s+)/mg, "  $1")
+          }).replace(/^(\s+)/mg, "  $1")
         })`;
       }
       case SYMBOL.Array: {
@@ -677,11 +709,11 @@ function serialize(
             options,
           )
         })`;
-      case SYMBOL.Function:
-        return serializeFunc($[SYMBOL.Function][i]);
+      case SYMBOL.Function:/* fallsthrough */
       default: {
+        key = SYMBOL.Function;
         try {
-          return serializeFunc($[SYMBOL.Function][i]);
+          return serializeFunc($[key][i]);
         } catch {
           return serialize($[key as keyof typeof $][i], options);
         }
@@ -692,7 +724,7 @@ function serialize(
   // Replaces all occurrences of map, regexp, date, etc. placeholders in the
   // JSON string with their string representations. If the original value can
   // not be found, then `undefined` is used.
-  str = str.replaceAll(RE.PLACEHOLDER, replaceFn);
+  str = str.replace(RE.PLACEHOLDER, replaceFn);
 
   /**
    * @FIXME come up with a better solution to this problem!
@@ -710,16 +742,16 @@ function serialize(
    * ```
    */
   if (options.includeGetters && RE.GETTER_BROKEN.test(str)) {
-    str = str.replaceAll(RE.GETTER_BROKEN, "");
+    str = str.replace(RE.GETTER_BROKEN, "");
   }
 
   if (RE.SHORT_BROKEN.test(str)) {
-    str = str.replaceAll(RE.SHORT_BROKEN, "");
+    str = str.replace(RE.SHORT_BROKEN, "");
   }
 
   const indent = getIndentSize(options?.space ?? 0);
   if (indent > 0) {
-    str = str.replaceAll(/^\s*(?=\]\))/mg, " ".repeat(indent));
+    str = str.replace(/^\s*(?=\]\))/mg, " ".repeat(indent));
   }
   return str;
 }

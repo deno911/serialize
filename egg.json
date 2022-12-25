@@ -8,10 +8,10 @@
   "version": "1.0.0",
   "releaseType": false,
   "bump": false,
-  "unstable": true,
+  "unstable": false,
   "unlisted": false,
   "files": [
-    "./{serialize,deserialize,mod,_util}.ts",
+    "./{serialize,deserialize,mod,_util,deps}.ts",
     "./{LICENSE,README.md}",
     "./deno.json*"
   ],

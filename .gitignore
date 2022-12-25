@@ -17,3 +17,5 @@ Thumbs.db
 deno.lock
 *.lock
 _next
+npm
+,/npm/**/*
