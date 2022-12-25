@@ -1,27 +1,31 @@
 import serialize from "./serialize.ts";
+import { is } from "./_util.ts";
 
 /**
  * Deserialize in a super unsafe way. This should probably never be used, as it
  * literally just evaluates whatever is passed into it. You've been warned.
  */
-function deserialize<T = unknown>(serialized: string): T {
-  if (typeof serialized !== "string") {
-    serialized = serialize(serialized as unknown);
+export function deserialize<T = unknown>(encoded: string): T {
+  if (!is.nonEmptyStringAndNotWhitespace(encoded)) {
+    encoded = serialize(encoded as unknown);
   }
+
   try {
-    return eval(`(${serialized})`) as T;
+    return eval(`(${encoded})`) as T;
   } catch (cause) {
-    throw new Error(
+    throw new EvalError(
       `Unable to deserialize code:\n\n\t${
-        String(serialized).slice(0, 50)
+        String(encoded).slice(0, 50)
       } [...]\n\nException raised: ${cause.toString()}`,
       { cause },
     );
   }
 }
 
-Object.freeze(deserialize);
+Object.defineProperty(deserialize, Symbol.toStringTag, {
+  value: "deserialize",
+});
 
-// export default deserialize;
+Object.preventExtensions(deserialize);
 
-export { deserialize, deserialize as default };
+export default deserialize;
