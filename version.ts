@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
+#!/usr/bin/env -S deno run --allow-all
 
 /// <reference no-default-lib="true" />
 /// <reference lib="deno.ns" />
@@ -22,57 +22,71 @@ export const MODULE = "serialize";
 
 const ansi = colors();
 const DEBUG = !["false", null, undefined].includes(Deno.env.get("DEBUG"));
-const preventPublishOnError = false;
+const preventPublishOnError = !DEBUG;
 const publishToNestLand = (Deno.env.get("NESTAPIKEY") !== undefined);
 
 /** `prepublish` will be invoked before publish */
 export async function prepublish(version: string) {
+  let hasError = false;
+  const ctx = {
+    version,
+    previous: VERSION,
+    semver: { releaseType: "patch" },
+  } as BumpContext;
+
   try {
-    const ctx = {
-      version,
-      previous: VERSION,
-      semver: { releaseType: "patch" },
-    } as BumpContext;
     try {
       await bump("./*.{md,ts}", version, ctx);
     } catch (err) {
       console.error(err);
-      return false;
+      hasError = true;
+      if (ctx.options?.failFast) return false;
     }
   } catch (err) {
     console.error(err);
-    if (preventPublishOnError) return false;
+    if (preventPublishOnError) {
+      hasError = true;
+      if (ctx.options?.failFast) return false;
+    }
   }
 
-  if (DEBUG) return false; // return a falsey value to prevent publishing.
+  try {
+    if (publishToNestLand) {
+      await publishNest(version).then(() => {
+        console.log(
+          ansi.green(
+            ` ${ansi.bold.brightGreen("✓")} ${
+              ansi.brightCyan.bold.underline(`${MODULE}@${version}`)
+            } published to ${ansi.magenta.bold.underline("nest.land")}`,
+          ),
+        );
+      }).catch(() => {
+        hasError = true;
+      });
+      if (ctx.options?.failFast && hasError) return false;
+    }
+  } catch (err) {
+    console.error(err);
+    hasError = true;
+    if (ctx.options?.failFast) return false;
+  }
+
+  if (hasError) return false;
+  // if (DEBUG) return false; // return a falsey value to prevent publishing.
 }
 
 /** `postpublish` will be invoked after publish */
-export async function postpublish(version: string) {
+export function postpublish(version: string) {
   console.log(
-    ansi.bold.green(
-      ` ✓ published ${ansi.brightYellow.underline(`${MODULE}@${version}`)} to ${
-        ansi.brightGreen.underline("deno.land")
-      } successfully`,
+    ansi.green(
+      ` ${ansi.bold.brightGreen("✓")} ${
+        ansi.cyan.underline(`${MODULE}@${version}`)
+      } published to ${ansi.brightBlue.bold.underline("deno.land")}`,
     ),
   );
-
-  try {
-    if (publishToNestLand) await publishNest(version);
-    console.log(
-      ansi.bold.green(
-        ` ✓ published ${
-          ansi.brightYellow.underline(`${MODULE}@${version}`)
-        } to ${ansi.magenta.underline("nest.land")} successfully`,
-      ),
-    );
-  } catch (err) {
-    console.error(err);
-    return false;
-  }
 }
 
-async function publishNest(version: string, ctx: Partial<BumpContext> = {}) {
+async function publishNest(version: string, _ctx: Partial<BumpContext> = {}) {
   // and link our nest api key from the environment
   const NESTAPIKEY = Deno.env.get("NESTAPIKEY");
   const egg = find<{
@@ -80,45 +94,58 @@ async function publishNest(version: string, ctx: Partial<BumpContext> = {}) {
     [x: string]: JSONC.JSONValue;
   }>("./egg.*");
 
+  if (!is.nonEmptyStringAndNotWhitespace(NESTAPIKEY)) {
+    throw new TypeError(
+      `${
+        ansi.bold.brightRed("⚠︎")
+      } Missing \`$NESTAPIKEY\`, which is required in current environment to publish on ${
+        ansi.bold.magenta("nest.land")
+      }. Please run \`eggs link\` and try again.`,
+    );
+  }
+
+  // ensure eggs is installed (implicit latest version)
+  await exec(
+    "deno install -A --unstable https://deno.land/x/eggs/cli.ts",
+  );
+
+  await exec("eggs", `link ${NESTAPIKEY}`);
+
   // sanity check
   if (egg?.parsed) {
-    if (is.nonEmptyStringAndNotWhitespace(NESTAPIKEY)) {
-      // ensure eggs is installed (implicit latest version)
-      await exec(
-        "deno install -A --unstable https://deno.land/x/eggs/cli.ts",
+    if (semver.lt(egg.parsed.version!, version)) {
+      egg.parsed.version = version;
+
+      const stringify = (egg.path.endsWith("json")
+        ? JSON.stringify
+        : egg.path.endsWith("toml")
+        ? TOML.stringify
+        : YAML.stringify);
+
+      Deno.writeTextFileSync(
+        egg.path,
+        Reflect.apply(
+          stringify,
+          undefined,
+          stringify === JSON.stringify ? [egg.parsed, null, 2] : [egg.parsed],
+        ),
       );
+    }
 
-      //
-      await exec("eggs", `link ${NESTAPIKEY}`);
+    const p = Deno.run({
+      cmd: ["eggs", "publish"],
+      env: { NESTAPIKEY },
+    });
 
-      if (semver.lt(egg.parsed.version!, version)) {
-        egg.parsed.version = version;
+    const [status] = await Promise.all([
+      p.status(),
+    ]);
 
-        const stringify = (egg.path.endsWith("json")
-          ? JSON.stringify
-          : egg.path.endsWith("toml")
-          ? TOML.stringify
-          : YAML.stringify);
-
-        Deno.writeTextFileSync(
-          egg.path,
-          Reflect.apply(
-            stringify,
-            undefined,
-            stringify === JSON.stringify ? [egg.parsed, null, 2] : [egg.parsed],
-          ),
-        );
-      }
-
-      await Deno.run({
-        cmd: ["eggs", "publish"],
-        env: { NESTAPIKEY },
-      });
-    } else {
+    if (!status.success) {
       throw new TypeError(
-        `Missing environment variable \`$NESTAPIKEY\`, which is required to publish on ${
-          ansi.bold.magenta("nest.land")
-        }. Please set it and try again.`,
+        `${
+          ansi.bold.brightRed("⚠︎")
+        } Error encountered during the nest.land publish step.`,
       );
     }
   }
@@ -241,8 +268,9 @@ async function bump(
         }
       } catch (error) {
         console.error(
-          ansi.bold.bgRed(" FAILED "),
-          `⚠︎ Unable to bump ${ansi.underline.red(file.name)} ${
+          `${ansi.bold.brightRed("⚠︎")} ${
+            ansi.bold.red.underline(" FAILED ")
+          } to bump ${ansi.underline.red(file.name)} ${
             previous ? `from ${ansi.underline(String(previous))}` : ""
           }to ${ansi.bold(version)}!\n\n${error}`,
         );
@@ -333,10 +361,8 @@ function exec(
   return Deno.run({
     cmd,
     env,
-    stderr: "null",
-    stdin: "null",
-    stdout: "piped",
+    // stderr: "null",
+    // stdin: "null",
+    // stdout: "piped",
   }).output().then((output) => new TextDecoder().decode(output));
 }
-
-export { bump, exec, find };

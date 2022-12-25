@@ -1,12 +1,10 @@
 {
-  "lock": false,
   "tasks": {
     "test": "deno test -A --unstable --no-check",
     "prepublish": "deno fmt; deno lint --unstable; deno task test",
-    "publish": "deno task prepublish; deno task publish:nest; deno task publish:deno; deno task build:npm && deno task publish:npm",
-    "publish:nest": "deno install -A --unstable https://deno.land/x/eggs/cli.ts; [ -n \"$NESTAPIKEY\" ] && eggs link ${NESTAPIKEY-} && eggs publish",
+    "publish": "deno task prepublish; deno task publish:deno; deno task build:npm && deno task publish:npm",
     "publish:deno": "deno run -A https://deno.land/x/publish/cli.ts",
-    "publish:npm": "deno run -A --unstable npm:pnpm@latest publish",
+    "publish:npm": "deno run -A --unstable npm:pnpm@latest publish --report-summary --no-git-checks --ignore-scripts --force --access=public -C ./npm",
     "build:npm": "deno run -A ./_build_npm.ts"
   },
   "compilerOptions": {
@@ -17,6 +15,9 @@
       "dom.extras",
       "dom.iterable",
       "deno.ns"
+    ],
+    "types": [
+      "./mod.d.ts"
     ]
   },
   "lint": {
@@ -29,12 +30,18 @@
         "ban-ts-comment"
       ]
     },
+    "files": {
+      "exclude": [
+        "./npm/**/*"
+      ]
+    },
     "report": "compact"
   },
   "fmt": {
     "files": {
       "exclude": [
-        "./.*"
+        "./.*",
+        "./npm/**/*"
       ]
     },
     "options": {
