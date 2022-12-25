@@ -1,4 +1,4 @@
-import { assert, is } from "https://x.nest.land/dis@0.3.0-rc.3/mod.ts";
+import { is } from "./deps.ts";
 
 // Generate an internal UID to make the regexp pattern harder to guess.
 export const UID_LENGTH = 16;
@@ -84,10 +84,10 @@ export function escapeUnsafeChars<C extends string>(char: C) {
 export function getIndentSize(space: string | number = 0): number {
   let indent = 0;
   const tabSize = 8;
-  if (is.number(space) || is.numericString(space)) {
-    indent = +space;
-  } else if (is.nonEmptyString(space)) {
+  if (is.nonEmptyString(space)) {
     indent = space.replace(/\t/g, " ".repeat(tabSize)).split("").length;
+  } else if (is.number(space) || is.numericString(space)) {
+    indent = +space;
   } else {
     indent = 0;
   }
@@ -142,5 +142,3 @@ export function validateRegExpFlags<S extends string>(flags: S) {
   const f = String(flags).toLowerCase().trim().replace(/[^dgimsuy]/g, "");
   return (f.length > 0 ? f : "") as ValidateRegExpFlag<S>;
 }
-
-export { assert, is };

@@ -1,5 +1,5 @@
-import serialize from "./serialize.ts";
-import { is } from "./_util.ts";
+import { serialize } from "./serialize.ts";
+import { is } from "./deps.ts";
 
 /**
  * Deserialize in a super unsafe way. This should probably never be used, as it
