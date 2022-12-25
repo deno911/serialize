@@ -5,9 +5,8 @@
   "description": "Serialize JS/TS into a superset of JSON, supporting Date, BigInt, RegExp, Maps, and more.",
   "homepage": "https://github.com/deno911/serialize",
   "repository": "https://github.com/deno911/serialize",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "releaseType": false,
-  "bump": false,
   "unstable": false,
   "unlisted": false,
   "files": [
