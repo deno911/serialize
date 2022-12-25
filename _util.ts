@@ -1,4 +1,4 @@
-import { assert, is } from "https://deno.land/x/dis@0.0.1/mod.ts";
+import { assert, is } from "https://x.nest.land/dis@0.3.0-rc.3/mod.ts";
 
 // Generate an internal UID to make the regexp pattern harder to guess.
 export const UID_LENGTH = 16;
@@ -81,6 +81,18 @@ export function escapeUnsafeChars<C extends string>(char: C) {
   ) as string;
 }
 
+export function getIndentSize(space: string | number = 0): number {
+  let indent = 0;
+  const tabSize = 8;
+  if (is.number(space) || is.numericString(space)) {
+    indent = +space;
+  } else if (is.nonEmptyString(space)) {
+    indent = space.replace(/\t/g, " ".repeat(tabSize)).split("").length;
+  } else {
+    indent = 0;
+  }
+  return indent;
+}
 export function generateUID(length = UID_LENGTH, radix = 16) {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
   let result = "";
@@ -95,7 +107,7 @@ export function deleteFunctions<T extends Record<string, any>>(obj: T) {
   const props = Object.getOwnPropertyDescriptors(obj);
 
   for (const key in props) {
-    if (is.function_(props[key].value) || is.function_(obj[key])) {
+    if (is.function(props[key].value) || is.function(obj[key])) {
       functionKeys.push(key);
     }
   }
@@ -117,19 +129,6 @@ export type PositiveInfinity = 1e999;
 export type NegativeInfinity = -1e999;
 export type Infinite = PositiveInfinity | NegativeInfinity;
 
-export function isInfinite(value: unknown): value is Infinite {
-  return (
-    is.number(value) &&
-    !isNaN(value) &&
-    !isFinite(value) &&
-    (value === Number.POSITIVE_INFINITY || value === Number.NEGATIVE_INFINITY)
-  );
-}
-
-export function isSparse(value: unknown[]): boolean {
-  return value.filter(Boolean).length !== value.length;
-}
-
 export type RegExpFlags = ["d", "g", "i", "m", "s", "u", "y"];
 export type RegExpFlag = RegExpFlags[number];
 
@@ -142,38 +141,6 @@ export type ValidateRegExpFlag<S extends string, R extends string = ""> =
 export function validateRegExpFlags<S extends string>(flags: S) {
   const f = String(flags).toLowerCase().trim().replace(/[^dgimsuy]/g, "");
   return (f.length > 0 ? f : "") as ValidateRegExpFlag<S>;
-}
-
-export type AccessorDescriptor<T = any> = Omit<
-  TypedPropertyDescriptor<T>,
-  "value" | "writable"
->;
-
-export type DataDescriptor<T = any> = Pick<
-  TypedPropertyDescriptor<T>,
-  "configurable" | "enumerable" | "writable" | "value"
->;
-
-export function isAccessorDescriptor<T = any>(
-  descriptor: unknown,
-): descriptor is AccessorDescriptor<T> {
-  const { hasOwn } = Object;
-  if (descriptor != undefined) {
-    return (hasOwn(descriptor, "get") || hasOwn(descriptor, "set")) &&
-      !(hasOwn(descriptor, "value") || hasOwn(descriptor, "writable"));
-  }
-  return false;
-}
-
-export function isDataDescriptor<T = any>(
-  descriptor: unknown,
-): descriptor is DataDescriptor<T> {
-  const { hasOwn } = Object;
-  if (descriptor != undefined) {
-    return (hasOwn(descriptor, "value") || hasOwn(descriptor, "writable")) &&
-      !(hasOwn(descriptor, "get") || hasOwn(descriptor, "set"));
-  }
-  return false;
 }
 
 export { assert, is };

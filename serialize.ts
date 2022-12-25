@@ -9,10 +9,8 @@ import {
   deleteFunctions,
   escapeUnsafeChars,
   fallbackSymbolKey,
+  getIndentSize,
   is,
-  isAccessorDescriptor,
-  isInfinite,
-  isSparse,
   RE,
   RESERVED,
   SYMBOL,
@@ -181,8 +179,9 @@ const defaultOptions: SerializeOptions = {
  * - [x] `RegExp` · enable {@linkcode options.literalRegExp} to output literals}
  * - [x] `BigInt` · enable {@linkcode options.literalBigInt} to output literals
  * - [x] `Function` · disable {@linkcode options.includeFunction} to exclude
- * - [x] `Getters` · enable {@linkcode options.includeGetters} to output the getter properties source code, instead of their resolved static value
- * - [ ] `Symbol` · disable {@linkcode options.includeSymbols} to exclude
+ * - [x] `Getters` · enable {@linkcode options.includeGetters} to output the
+ * getter properties source code, instead of their resolved static value
+ * - [x] `Symbol.for` · disable {@linkcode options.includeSymbols} to exclude
  *
  * ### Options
  *
@@ -211,7 +210,22 @@ const defaultOptions: SerializeOptions = {
  * @returns string contained the serialized data
  * @see {@linkcode SerializeOptions}
  */
-function serialize<T>(value: T): string;
+function serialize<T = any>(value: T): string;
+
+/**
+ * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
+ * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
+ *
+ * @param value - object literal or instance to be serialized
+ * @param options - object literal of {@linkcode SerializeOptions} type
+ * @returns string contained the serialized data
+ * @see {@linkcode SerializeOptions}
+ */
+function serialize<T = any, O extends SerializeOptions = SerializeOptions>(
+  value: T,
+  options: O,
+): string;
+
 /**
  * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
  * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
@@ -222,17 +236,12 @@ function serialize<T>(value: T): string;
  * @returns string contained the serialized data
  * @see {@linkcode SerializeOptions}
  */
-function serialize<T>(value: T, space: number | string): string;
-/**
- * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
- * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
- *
- * @param value - object literal or instance to be serialized
- * @param options - object literal of {@linkcode SerializeOptions} type
- * @returns string contained the serialized data
- * @see {@linkcode SerializeOptions}
- */
-function serialize<T>(value: T, options: SerializeOptions): string;
+function serialize<
+  T = any,
+  S extends number | string = 0,
+  O extends SerializeOptions = { space: S },
+>(value: T, space: S): string;
+
 /**
  * Serializes JavaScript / TypeScript to a _superset_ of JSON, supporting
  * builtin featurs including RegExp, Date, BigInt, Map, Set, and more.
@@ -243,26 +252,28 @@ function serialize<T>(value: T, options: SerializeOptions): string;
  * @see {@linkcode SerializeOptions}
  */
 function serialize(
-  value: object,
-  options: SerializeOptions | (string | number),
-): string;
-
-function serialize(
-  obj: object,
+  obj: any,
   maybeOptions: any = { ...defaultOptions },
 ): string {
   const options: SerializeOptions = { ...defaultOptions };
 
-  // Backwards-compatibility for `space` as the second argument.
+  const assign = Object.assign, seal = Object.seal;
+
+  // Overload #1
+  // serialize(value: any, { space: "\t" })
   if (is.plainObject(maybeOptions)) {
-    Object.assign(options, { ...maybeOptions });
-  } else if (is.number(maybeOptions) || is.numericString(maybeOptions)) {
-    Object.assign(options, { space: +maybeOptions });
-  } else if (is.string(maybeOptions)) {
-    Object.assign(options, { space: maybeOptions });
+    assign(options, maybeOptions);
+  } // Overload #2
+  // serialize(value: any, space: 2)
+  else if (is.number(maybeOptions) || is.numericString(maybeOptions)) {
+    let space = +maybeOptions;
+    space = space > 8 ? 8 : space < 0 ? 0 : space;
+    assign(options, { space });
+  } else {
+    assign(options, { space: maybeOptions || 0 });
   }
 
-  const $ = Object.freeze({
+  const $ = seal({
     [SYMBOL.URL]: [] as (URL | string)[],
     [SYMBOL.Map]: [] as Map<unknown, unknown>[],
     [SYMBOL.Set]: [] as Set<unknown>[],
@@ -289,16 +300,6 @@ function serialize(
      */
     const origValue = (this as any)[key] ?? Reflect.get(this, key);
 
-    /**
-     * Typed Property Descriptor for the object property currently being
-     * inspected. This is used to check enumerability and to extract the code
-     * for data accessors (getters/setters), if configured as such.
-     */
-    const descriptor = Object.getOwnPropertyDescriptor(
-      this,
-      key,
-    ) as TypedPropertyDescriptor<V>;
-
     // For nested function
     if (!options.includeFunction) {
       deleteFunctions(value as any);
@@ -308,90 +309,138 @@ function serialize(
     if (!value && value !== undefined) {
       return value as null;
     }
+    let descriptor: TypedPropertyDescriptor<V> | undefined = undefined;
 
-    // exclude hidden properties by default
-    if (!options.includeHidden && descriptor.enumerable === false) {
-      return null;
-    }
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(
+        this,
+        key,
+      ) as TypedPropertyDescriptor<V> ?? {};
+    } catch { /* ignore */ }
 
-    // Review property descriptors to see if prop is an accessor
-    if (isAccessorDescriptor(descriptor) && is.function_(descriptor.get)) {
-      const getterSource = Function.prototype.toString.call(descriptor.get);
-      const getterValue = descriptor.get.call(this);
+    if (is.object(this[key]) && descriptor !== undefined) {
+      /**
+       * Typed Property Descriptor for the object property currently being
+       * inspected. This is used to check enumerability and to extract the code
+       * for data accessors (getters/setters), if configured as such.
+       */
 
-      if (!options.includeGetters) {
-        return value;
+      // exclude hidden properties by default
+      if (!options.includeHidden && descriptor.enumerable === false) {
+        return null;
       }
 
-      if (RE.GETTER.test(getterSource)) {
-        return `@__${SYMBOL.Getter}-${UID}-${($[SYMBOL.Getter].push(
-          options.includeGetters ? descriptor.get : value,
-        ) - 1)}__@`;
-      }
+      // Review property descriptors to see if prop is an accessor
+      if (
+        is.plainObject(descriptor) &&
+        is.subset({
+          get: () => {},
+          set: () => {},
+          enumerable: false,
+          configurable: false,
+        }, descriptor) && is.function(descriptor.get)
+      ) {
+        const getterSource = Function.prototype.toString.call(descriptor?.get);
+        const getterValue = descriptor?.get?.();
 
-      return serialize(getterValue, options);
+        if (!options.includeGetters) {
+          return getterValue || origValue;
+        }
+
+        if (RE.GETTER.test(getterSource)) {
+          return `@__${SYMBOL.Getter}-${UID}-${
+            $[SYMBOL.Getter].push(
+              options.includeGetters ? descriptor.get : origValue,
+            ) - 1
+          }__@`;
+        }
+
+        return serialize(getterValue, options);
+      }
     }
 
     if (is.object(origValue)) {
       if (is.regExp(origValue)) {
-        return `@__${SYMBOL.RegExp}-${UID}-${($[SYMBOL.RegExp].push(
-          origValue,
-        ) - 1)}__@`;
+        return `@__${SYMBOL.RegExp}-${UID}-${
+          $[SYMBOL.RegExp].push(
+            origValue,
+          ) - 1
+        }__@`;
       }
 
       if (is.date(origValue)) {
-        return `@__${SYMBOL.Date}-${UID}-${($[SYMBOL.Date].push(
-          origValue,
-        ) - 1)}__@`;
+        return `@__${SYMBOL.Date}-${UID}-${
+          $[SYMBOL.Date].push(
+            origValue,
+          ) - 1
+        }__@`;
       }
 
-      if (is.map(origValue)) {
-        return `@__${SYMBOL.Map}-${UID}-${($[SYMBOL.Map].push(
-          origValue,
-        ) - 1)}__@`;
+      if (is.nonEmptyMap(origValue)) {
+        return `@__${SYMBOL.Map}-${UID}-${
+          $[SYMBOL.Map].push(
+            origValue,
+          ) - 1
+        }__@`;
       }
 
-      if (is.set(origValue)) {
-        return `@__${SYMBOL.Set}-${UID}-${($[SYMBOL.Set].push(
-          origValue,
-        ) - 1)}__@`;
+      if (is.nonEmptySet(origValue)) {
+        return `@__${SYMBOL.Set}-${UID}-${
+          $[SYMBOL.Set].push(
+            origValue,
+          ) - 1
+        }__@`;
       }
 
-      if (is.array(origValue) && isSparse(origValue)) {
-        return `@__${SYMBOL.Array}-${UID}-${($[SYMBOL.Array].push(
-          origValue,
-        ) - 1)}__@`;
+      if (
+        (is.nonEmptyArray(origValue) && is.sparseArray(origValue))
+      ) {
+        return `@__${SYMBOL.Array}-${UID}-${
+          $[SYMBOL.Array].push(
+            Array.from(origValue),
+          ) - 1
+        }__@`;
       }
 
-      if (is.urlInstance(origValue)) {
-        return `@__${SYMBOL.URL}-${UID}-${($[SYMBOL.URL].push(
-          origValue,
-        ) - 1)}__@`;
+      if (is.url(origValue)) {
+        return `@__${SYMBOL.URL}-${UID}-${
+          $[SYMBOL.URL].push(
+            origValue,
+          ) - 1
+        }__@`;
       }
     }
 
-    if (is.function_(origValue)) {
-      return `@__${SYMBOL.Function}-${UID}-${($[SYMBOL.Function].push(
-        origValue,
-      ) - 1)}__@`;
+    if (is.function(origValue)) {
+      return `@__${SYMBOL.Function}-${UID}-${
+        $[SYMBOL.Function].push(
+          origValue,
+        ) - 1
+      }__@`;
     }
 
     if (is.undefined(origValue)) {
-      return `@__${SYMBOL.Undefined}-${UID}-${($[SYMBOL.Undefined].push(
-        origValue,
-      ) - 1)}__@`;
+      return `@__${SYMBOL.Undefined}-${UID}-${
+        $[SYMBOL.Undefined].push(
+          origValue,
+        ) - 1
+      }__@`;
     }
 
-    if (isInfinite(origValue)) {
-      return `@__${SYMBOL.Infinity}-${UID}-${($[SYMBOL.Infinity].push(
-        origValue,
-      ) - 1)}__@`;
+    if (is.infinite(origValue)) {
+      return `@__${SYMBOL.Infinity}-${UID}-${
+        $[SYMBOL.Infinity].push(
+          origValue,
+        ) - 1
+      }__@`;
     }
 
     if (is.bigint(origValue)) {
-      return `@__${SYMBOL.BigInt}-${UID}-${($[SYMBOL.BigInt].push(
-        origValue,
-      ) - 1)}__@`;
+      return `@__${SYMBOL.BigInt}-${UID}-${
+        $[SYMBOL.BigInt].push(
+          origValue,
+        ) - 1
+      }__@`;
     }
 
     if (is.symbol(origValue)) {
@@ -405,8 +454,9 @@ function serialize(
           fallbackSymbolKey($[SYMBOL.Symbol].length)
       );
       const value = origValue ?? Symbol.for(key);
-      return `@__${SYMBOL.Symbol}-${UID}-${($[SYMBOL.Symbol].push(value) -
-        1)}__@`;
+      return `@__${SYMBOL.Symbol}-${UID}-${
+        $[SYMBOL.Symbol].push(value) - 1
+      }__@`;
     }
 
     return value as any;
@@ -418,8 +468,8 @@ function serialize(
    * @param fn the function expression to serialize
    * @date 11/24/2022 - 2:41:36 PM
    */
-  function serializeFunc(fn: Function | ((...args: any[]) => unknown)) {
-    assert.function_(fn);
+  function serializeFunc(fn: Function | ((...args: any[]) => unknown)): string {
+    assert.function(fn);
 
     /**
      * String containing the serialized source of the target function.
@@ -436,7 +486,7 @@ function serialize(
 
     if (RE.NATIVE.test(serializedFn)) {
       if (options.silent) {
-        return undefined;
+        return "undefined";
       } else {
         throw new TypeError(
           `Unable to serialize native function:\n\t${fn.name}`,
@@ -467,12 +517,13 @@ function serialize(
         -1
       ),
     });
-    const def = serializedFn.slice(0, argIndex).trim().split(" ").filter((
-      val,
-    ) => val.length > 0);
+    const defString = serializedFn.slice(0, argIndex).trim();
+    const def = defString.normalize("NFC").split(" ").filter((val) =>
+      val.length
+    );
 
-    const nonReservedSymbols = def.filter((s) =>
-      RESERVED.includes(s as RESERVED[number])
+    const nonReservedSymbols = (def as any[]).filter((s) =>
+      RESERVED.includes(s)
     );
 
     // enhanced literal objects, example: {key() {}}
@@ -490,7 +541,7 @@ function serialize(
   }
 
   // Check if the parameter issa function
-  if (!options.includeFunction && is.function_(obj)) {
+  if (!options.includeFunction && is.function(obj)) {
     obj = undefined as any;
   }
 
@@ -510,7 +561,7 @@ function serialize(
   );
 
   // another sanity check...
-  if (!is.string(str)) {
+  if (!is.nonEmptyString(str)) {
     return String(str);
   }
 
@@ -525,15 +576,17 @@ function serialize(
     return str;
   }
 
-  function maybeSort(arr: unknown[]) {
+  function maybeSort(arr: unknown[] | ArrayLike<unknown>) {
     const shouldSort = options.sorted === true;
-    const copy = (
-      options.arrayFrom ? Array.from(arr) : Array.prototype.slice.call(arr)
-    );
+    // const copy = (
+    //   options.arrayFrom ? Array.from(arr) : Array.prototype.slice.call(arr)
+    // );
+    const copy = Array.from(arr);
+
     if (shouldSort) {
       let sortMethod: "toSorted" | "sort" = "sort";
 
-      if ([].toSorted && typeof [].toSorted === "function") {
+      if ([].toSorted && is.function([].toSorted)) {
         sortMethod = "toSorted";
       }
 
@@ -542,15 +595,22 @@ function serialize(
     return copy;
   }
 
-  function replaceFn(str: string, backslash: string, key: string, i: number) {
+  function replaceFn(
+    str: string,
+    backslash: string,
+    key: SYMBOL[keyof SYMBOL] | keyof SYMBOL,
+    i: number,
+  ): string {
     // The placeholder may not be preceded by a backslash. This is to prevent
     // replacing things like `"a\"@__R-<UID>-0__@"` and thus outputting
     // invalid JS.
     if (backslash) return str;
-
+    if (!Object.values(SYMBOL).includes(key as any) && (key in SYMBOL)) {
+      return replaceFn(str, backslash, SYMBOL[key as keyof SYMBOL], i);
+    }
     switch (key) {
       case SYMBOL.Date:
-        return `new Date("${$[key][i].toISOString()}")`;
+        return `new Date("${new Date($[key][i]).toISOString()}")`;
       case SYMBOL.RegExp: {
         if (options.literalRegExp) {
           return String.raw`/${$[key][i].source}/${
@@ -570,13 +630,24 @@ function serialize(
           : String($[key][i]);
       }
       case SYMBOL.Map: {
+        const indent = getIndentSize(options.space);
+        const space = indent > 0 ? indent : 0;
         return `new Map(${
-          serialize(maybeSort(Array.from($[key][i].entries())), options)
+          serialize(maybeSort(Array.from($[key][i].entries())), {
+            ...options,
+            space,
+          }).replaceAll(/^(\s+)/mg, "  $1")
         })`;
       }
       case SYMBOL.Set: {
+        const indent = getIndentSize(options.space);
+        const space = indent > 0 ? indent : 0;
+
         return `new Set(${
-          serialize(maybeSort(Array.from($[key][i].values())), options)
+          serialize(maybeSort(Array.from($[key][i].values())), {
+            ...options,
+            space,
+          }).replaceAll(/^(\s+)/mg, "  $1")
         })`;
       }
       case SYMBOL.Array: {
@@ -606,16 +677,22 @@ function serialize(
             options,
           )
         })`;
-      case SYMBOL.Function:/* fall through */
-      default:
+      case SYMBOL.Function:
         return serializeFunc($[SYMBOL.Function][i]);
+      default: {
+        try {
+          return serializeFunc($[SYMBOL.Function][i]);
+        } catch {
+          return serialize($[key as keyof typeof $][i], options);
+        }
+      }
     }
   }
 
   // Replaces all occurrences of map, regexp, date, etc. placeholders in the
   // JSON string with their string representations. If the original value can
   // not be found, then `undefined` is used.
-  str = str.replace(RE.PLACEHOLDER, replaceFn);
+  str = str.replaceAll(RE.PLACEHOLDER, replaceFn);
 
   /**
    * @FIXME come up with a better solution to this problem!
@@ -640,6 +717,10 @@ function serialize(
     str = str.replaceAll(RE.SHORT_BROKEN, "");
   }
 
+  const indent = getIndentSize(options?.space ?? 0);
+  if (indent > 0) {
+    str = str.replaceAll(/^\s*(?=\]\))/mg, " ".repeat(indent));
+  }
   return str;
 }
 
