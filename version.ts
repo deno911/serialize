@@ -16,66 +16,28 @@ import {
   YAML,
 } from "./deps.ts";
 
+/** `VERSION` managed by https://deno.land/x/publish */
+export const VERSION = "1.0.0";
+export const MODULE = "serialize";
+
 const ansi = colors();
 const DEBUG = !["false", null, undefined].includes(Deno.env.get("DEBUG"));
 const preventPublishOnError = false;
-
-/** `VERSION` managed by https://deno.land/x/publish */
-export const VERSION = "1.0.0-rc.2";
-export const MODULE = "serialize";
+const publishToNestLand = (Deno.env.get("NESTAPIKEY") !== undefined);
 
 /** `prepublish` will be invoked before publish */
 export async function prepublish(version: string) {
   try {
-    await bump("./*.{md,ts}", { version });
-
-    // and link our nest api key from the environment
-    const NESTAPIKEY = Deno.env.get("NESTAPIKEY");
-    const egg = find<{
-      version: string;
-      [x: string]: JSONC.JSONValue;
-    }>("./egg.*");
-
-    // sanity check
-    if (egg?.parsed) {
-      if (is.nonEmptyStringAndNotWhitespace(NESTAPIKEY)) {
-        // ensure eggs is installed (implicit latest version)
-        await exec(
-          Deno.execPath(),
-          "install -A https://deno.land/x/eggs/cli.ts",
-        );
-        //
-        await exec("eggs", `link ${NESTAPIKEY}`);
-
-        if (semver.lt(egg.parsed.version!, version)) {
-          egg.parsed.version = version;
-
-          const stringify = (egg.path.endsWith("json")
-            ? JSON.stringify
-            : egg.path.endsWith("toml")
-            ? TOML.stringify
-            : YAML.stringify);
-
-          Deno.writeTextFileSync(
-            egg.path,
-            Reflect.apply(
-              stringify,
-              undefined,
-              stringify === JSON.stringify
-                ? [egg.parsed, null, 2]
-                : [egg.parsed],
-            ),
-          );
-        }
-
-        await exec("eggs", "publish");
-      } else {
-        throw new TypeError(
-          `Missing environment variable \`$NESTAPIKEY\`, which is required to publish on ${
-            ansi.bold.magenta("nest.land")
-          }. Please set it and try again.`,
-        );
-      }
+    const ctx = {
+      version,
+      previous: VERSION,
+      semver: { releaseType: "patch" },
+    } as BumpContext;
+    try {
+      await bump("./*.{md,ts}", version, ctx);
+    } catch (err) {
+      console.error(err);
+      return false;
     }
   } catch (err) {
     console.error(err);
@@ -86,12 +48,80 @@ export async function prepublish(version: string) {
 }
 
 /** `postpublish` will be invoked after publish */
-export function postpublish(version: string) {
+export async function postpublish(version: string) {
   console.log(
-    ansi.bold.brightGreen(
-      ` ✓ published ${ansi.green.underline(`${MODULE}@${version}`)}`,
+    ansi.bold.green(
+      ` ✓ published ${ansi.brightYellow.underline(`${MODULE}@${version}`)} to ${
+        ansi.brightGreen.underline("deno.land")
+      } successfully`,
     ),
   );
+
+  try {
+    if (publishToNestLand) await publishNest(version);
+    console.log(
+      ansi.bold.green(
+        ` ✓ published ${
+          ansi.brightYellow.underline(`${MODULE}@${version}`)
+        } to ${ansi.magenta.underline("nest.land")} successfully`,
+      ),
+    );
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+async function publishNest(version: string, ctx: Partial<BumpContext> = {}) {
+  // and link our nest api key from the environment
+  const NESTAPIKEY = Deno.env.get("NESTAPIKEY");
+  const egg = find<{
+    version: string;
+    [x: string]: JSONC.JSONValue;
+  }>("./egg.*");
+
+  // sanity check
+  if (egg?.parsed) {
+    if (is.nonEmptyStringAndNotWhitespace(NESTAPIKEY)) {
+      // ensure eggs is installed (implicit latest version)
+      await exec(
+        "deno install -A --unstable https://deno.land/x/eggs/cli.ts",
+      );
+
+      //
+      await exec("eggs", `link ${NESTAPIKEY}`);
+
+      if (semver.lt(egg.parsed.version!, version)) {
+        egg.parsed.version = version;
+
+        const stringify = (egg.path.endsWith("json")
+          ? JSON.stringify
+          : egg.path.endsWith("toml")
+          ? TOML.stringify
+          : YAML.stringify);
+
+        Deno.writeTextFileSync(
+          egg.path,
+          Reflect.apply(
+            stringify,
+            undefined,
+            stringify === JSON.stringify ? [egg.parsed, null, 2] : [egg.parsed],
+          ),
+        );
+      }
+
+      await Deno.run({
+        cmd: ["eggs", "publish"],
+        env: { NESTAPIKEY },
+      });
+    } else {
+      throw new TypeError(
+        `Missing environment variable \`$NESTAPIKEY\`, which is required to publish on ${
+          ansi.bold.magenta("nest.land")
+        }. Please set it and try again.`,
+      );
+    }
+  }
 }
 
 type Arrayable<T> = T | T[];
@@ -274,28 +304,31 @@ function find<T = { [key: string]: JSONC.JSONValue }>(
 }
 
 function exec<
-  Env extends Record<string, string>,
-  Cmd extends string[] = string[],
->(env: Env, ...cmd: Cmd): Promise<string>;
-
-function exec<
   Cmd extends string[] = string[],
 >(...cmd: Cmd): Promise<string>;
 
 function exec(
-  env: string | Record<string, string>,
-  ...cmd: string[]
+  ...command: (string | Record<string, string>)[]
 ): Promise<string> {
-  if (is.string(env)) {
-    cmd.unshift(env);
-    env = {} as Record<string, string>;
-  }
-
+  const env: Record<string, string> = Object.assign(
+    {},
+    ...(command.filter(is.plainObject)),
+  );
+  let cmd = [...command.filter(is.string)];
   assert.plainObject(env);
+  assert.nonEmptyArray(cmd);
+
+  const HOME = Deno.env.get("HOME") || "~";
+  const PATH = Deno.env.get("PATH") ||
+    "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin";
+  const DENO_INSTALL = `${HOME}/.deno`;
+
+  Object.assign(env, { DENO_INSTALL, PATH: `${DENO_INSTALL}/bin:${PATH}` });
 
   if (cmd.length === 1) {
-    cmd = cmd[0].split(/\s+/, 2);
+    cmd = String(cmd[0]).split(/\s+/).flat();
   }
+  cmd = [cmd].flat(2).flatMap((s) => s.split(/\s+/)).flat();
 
   return Deno.run({
     cmd,

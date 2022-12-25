@@ -15,13 +15,13 @@ The string returned from the `serialize` function is **literal** and **valid** J
 #### [deno.land](https://deno.land/x/serialize)
 
 ```ts
-import { serialize } from "https://deno.land/x/serialize@1.0.0-rc.2/mod.ts";
+import { serialize } from "https://deno.land/x/serialize@1.0.0/mod.ts";
 ```
 
 #### [nest.land](https://x.nest.land/gallery/serialize)
 
 ```ts
-import { serialize } from "https://x.nest.land/serialize@1.0.0-rc.2/mod.ts";
+import { serialize } from "https://x.nest.land/serialize@1.0.0/mod.ts";
 ```
 
 ### "Kitchen Sink" Demo
@@ -408,7 +408,7 @@ function deserialize<T>(serialized: string): T {
 import {
   deserialize,
   serialize,
-} from "https://deno.land/x/serialize@1.0.0-rc.2/mod.ts";
+} from "https://deno.land/x/serialize@1.0.0/mod.ts";
 
 interface User {
   name: string;
