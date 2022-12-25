@@ -1,4 +1,3 @@
-
 export {
   type Assert,
   assert,
@@ -19,4 +18,3 @@ export * as JSONC from "https://deno.land/std@0.170.0/encoding/jsonc.ts";
 export * as YAML from "https://deno.land/std@0.170.0/encoding/yaml.ts";
 
 export * as TOML from "https://deno.land/std@0.170.0/encoding/toml.ts";
-

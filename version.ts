@@ -177,8 +177,8 @@ async function bump(
             : [options?.placeholders ?? ""].flat().flatMap((s) =>
               s.split(/\b\|\b/)
             ).map((s) =>
-                s.replaceAll(PLACEHOLDER_RE, options?.placeholder ?? "VERSION")
-              ).join("|")
+              s.replaceAll(PLACEHOLDER_RE, options?.placeholder ?? "VERSION")
+            ).join("|")
         ) as string;
 
         PLACEHOLDERS = PLACEHOLDERS + "|";
@@ -204,8 +204,10 @@ async function bump(
         let content = await Deno.readTextFile(file.path);
 
         if (SPECIFIER_RE.test(content)) {
-          content = content.replaceAll(SPECIFIER_RE, semver.valid(version) ?? version),
-            await Deno.writeTextFile(file.path, content).catch(console.error);
+          content = content.replaceAll(
+            SPECIFIER_RE,
+            semver.valid(version) ?? version,
+          ), await Deno.writeTextFile(file.path, content).catch(console.error);
         }
       } catch (error) {
         console.error(
@@ -265,7 +267,6 @@ function find<T = { [key: string]: JSONC.JSONValue }>(
     }
 
     return { source, parsed, path, ext };
-
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error;
     return undefined;

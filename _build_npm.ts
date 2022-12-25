@@ -1,23 +1,12 @@
 #!/usr/bin/env -S deno run -A
 
-// Copyright 2018-2022 the oak authors. All rights reserved. MIT license.
-
-/**
- * This is the build script for building the oak framework into a Node.js
- * compatible npm package.
- *
- * @module
- */
-
 import { build, emptyDir } from "https://deno.land/x/dnt@0.32.1/mod.ts";
-import { copy } from "https://deno.land/std@0.170.0/fs/copy.ts";
+import { VERSION } from "./version.ts";
 
 const NPM_DIR = "./_npm";
 
 async function start() {
   await emptyDir(NPM_DIR);
-  // await copy("fixtures", "npm/esm/fixtures", { overwrite: true });
-  // await copy("fixtures", "npm/script/fixtures", { overwrite: true });
 
   await build({
     entryPoints: ["./mod.ts"],
@@ -29,16 +18,6 @@ async function start() {
       blob: true,
       crypto: true,
       deno: true,
-      undici: true,
-      custom: [{
-        package: {
-          name: "stream/web",
-        },
-        globalNames: ["ReadableStream", "TransformStream"],
-      }, {
-        module: "./node_shims.ts",
-        globalNames: ["ErrorEvent"],
-      }],
     },
     test: true,
     typeCheck: false,
@@ -48,13 +27,11 @@ async function start() {
       lib: ["esnext", "dom", "dom.iterable"],
     },
     package: {
-      name: "serialize.ts",
-      version: Deno.args[0],
+      name: "serializd",
+      version: Deno.args[0] || VERSION,
       author: "Nicholas Berlette <nick@berlette.com>",
       license: "MIT",
       private: false,
-      homepage: "https://github.com/deno911/serialize/#readme",
-      readme: "https://github.com/deno911/serialize/#readme",
       description:
         "Serialize JavaScript/TypeScript into a JSON superset, retaining Maps, Sets, Dates, RegExps, Functions, and more. Based on serialize-javascript, rewritten in TS for the modern era. Supports Deno and Node.",
       keywords: [
@@ -69,6 +46,8 @@ async function start() {
       engines: {
         node: ">=16.5.0",
       },
+      homepage: "https://deno.land/x/serialize?doc",
+      readme: "https://github.com/deno911/serialize/#readme",
       repository: {
         type: "git",
         url: "git+https://github.com/deno911/serialize.git",
