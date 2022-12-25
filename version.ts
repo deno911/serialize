@@ -17,7 +17,7 @@ import {
 } from "./deps.ts";
 
 /** `VERSION` managed by https://deno.land/x/publish */
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 export const MODULE = "serialize";
 
 const ansi = colors();
